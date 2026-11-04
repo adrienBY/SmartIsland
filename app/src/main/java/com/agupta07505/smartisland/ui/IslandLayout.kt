@@ -231,11 +231,11 @@ internal const val PILL_ENTER_FADE = 0.35f
  * The collapsed pill's stretch / shrink between its idle and with-content widths: a little bounce on the way out,
  * settles on the way back.
  */
-internal const val PILL_STRETCH_DAMPING = 0.72f
-internal const val PILL_STRETCH_STIFFNESS = 420f
+internal const val PILL_STRETCH_DAMPING = com.agupta07505.smartisland.model.LiquidMotion.PILL_STRETCH_DAMPING
+internal const val PILL_STRETCH_STIFFNESS = com.agupta07505.smartisland.model.LiquidMotion.PILL_STRETCH_STIFFNESS
 
 /** Arrival pulse of the collapsed pill: +12.5 % width (of the with-content width), out fast, back soft. The height does not change. */
-internal const val PILL_PULSE_WIDTH_FRACTION = 0.125f
+internal const val PILL_PULSE_WIDTH_FRACTION = com.agupta07505.smartisland.model.LiquidMotion.PULSE_WIDTH_FRACTION
 internal const val PILL_PULSE_OUT_STIFFNESS = 600f
 internal const val PILL_PULSE_BACK_STIFFNESS = 380f
 
@@ -316,9 +316,23 @@ internal fun rememberIslandLayout(
         dampingRatio = islandSpringDamping(isLandscape),
         stiffness = animSpeed.stiffness(islandSpringStiffness(isLandscape))
     )
+    // Portrait: the height trails the width on its own softer spring, so the island stretches wide, then pours down.
     val heightSpec = spring<androidx.compose.ui.unit.Dp>(
-        dampingRatio = islandSpringDamping(isLandscape) + 0.04f,
-        stiffness = animSpeed.stiffness(islandSpringStiffness(isLandscape))
+        dampingRatio = if (isLandscape) islandSpringDamping(true) + 0.04f
+        else com.agupta07505.smartisland.model.LiquidMotion.HEIGHT_DAMPING,
+        stiffness = animSpeed.stiffness(
+            islandSpringStiffness(isLandscape) *
+                (if (isLandscape) 1f else com.agupta07505.smartisland.model.LiquidMotion.HEIGHT_STIFFNESS_SHARE)
+        )
+    )
+    // The vertical expand progress runs on the same spring as the height, so the shell's top edge and its height agree.
+    val heightSpecFloat = spring<Float>(
+        dampingRatio = if (isLandscape) islandSpringDamping(true) + 0.04f
+        else com.agupta07505.smartisland.model.LiquidMotion.HEIGHT_DAMPING,
+        stiffness = animSpeed.stiffness(
+            islandSpringStiffness(isLandscape) *
+                (if (isLandscape) 1f else com.agupta07505.smartisland.model.LiquidMotion.HEIGHT_STIFFNESS_SHARE)
+        )
     )
     // Collapsed geometry changing while the island stays collapsed (a card arriving or leaving): no glide.
     val settleOrSnap: androidx.compose.animation.core.FiniteAnimationSpec<androidx.compose.ui.unit.Dp> =
@@ -577,7 +591,7 @@ internal fun rememberIslandLayout(
     // The same number for the vertical axis: it follows the height spring (no overshoot on a visible-pill collapse),
     // so the pill's centre row stays pinned while the card shrinks into it.
     val expandProgressYState = transition.animateFloat(
-        transitionSpec = { if (initialState == targetState) androidx.compose.animation.core.snap() else if (!targetState && collapseOnPill) collapseSettleSpecFloat else sizeSpecFloat },
+        transitionSpec = { if (initialState == targetState) androidx.compose.animation.core.snap() else if (!targetState && collapseOnPill) collapseSettleSpecFloat else if (targetState && !isLandscape) heightSpecFloat else sizeSpecFloat },
         label = "islandExpandProgressY"
     ) {
         if (it) 1f else 0f
@@ -641,7 +655,7 @@ internal fun rememberIslandLayout(
         if (com.agupta07505.smartisland.model.AppHandoff.explainsArrival(AppHandoffBus.event, arrivalKey, now)) return@LaunchedEffect
         lastPulseAt[0] = now
         pulse.snapTo(0f)
-        pulse.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = animSpeed.stiffness(PILL_PULSE_OUT_STIFFNESS)))
+        pulse.animateTo(1f, spring(dampingRatio = com.agupta07505.smartisland.model.LiquidMotion.PULSE_OUT_DAMPING, stiffness = animSpeed.stiffness(PILL_PULSE_OUT_STIFFNESS)))
         pulse.animateTo(0f, spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy, stiffness = animSpeed.stiffness(PILL_PULSE_BACK_STIFFNESS)))
     }
     LaunchedEffect(expanded, holdArrivalPulse) { if (expanded || holdArrivalPulse) pulse.snapTo(0f) }

@@ -85,6 +85,6 @@ class AppHandoffTest {
         assertEquals(1f, AppHandoff.contentAlpha(1f), 0.001f)
         assertEquals(AppHandoff.CONTENT_START_SCALE, AppHandoff.contentScale(0f), 0.001f)
         assertEquals(1f, AppHandoff.contentScale(1f), 0.001f)
-        assertTrue(AppHandoff.contentScale(1.2f) <= 1.03f)
+        assertTrue(AppHandoff.contentScale(1.2f) <= 1.06f)
     }
 }

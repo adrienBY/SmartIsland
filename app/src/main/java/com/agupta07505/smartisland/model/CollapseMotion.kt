@@ -15,8 +15,8 @@ import kotlin.math.sqrt
 object CollapseMotion {
     const val STIFFNESS = 300f
 
-    /** Width spring: about 4 % overshoot. */
-    const val WIDTH_DAMPING = 0.72f
+    /** Width spring: about 5.4 % overshoot (liquid; was 0.72, about 4 %). */
+    const val WIDTH_DAMPING = 0.68f
 
     /** Height, corner radius and vertical progress: no overshoot. */
     const val SETTLE_DAMPING = 1f

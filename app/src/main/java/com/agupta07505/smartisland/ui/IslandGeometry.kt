@@ -160,8 +160,10 @@ internal const val SECONDARY_RETURN_MS = com.agupta07505.smartisland.model.SECON
 internal val MERGE_IN_EASING = androidx.compose.animation.core.CubicBezierEasing(0.55f, 0.05f, 0.35f, 1f)
 internal val MERGE_OUT_EASING = androidx.compose.animation.core.CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)
 
-internal fun islandSpringDamping(isLandscape: Boolean): Float = if (isLandscape) 0.86f else 0.8f
-internal fun islandSpringStiffness(isLandscape: Boolean): Float = if (isLandscape) 280f else 400f
+internal fun islandSpringDamping(isLandscape: Boolean): Float =
+    if (isLandscape) 0.86f else com.agupta07505.smartisland.model.LiquidMotion.PORTRAIT_DAMPING
+internal fun islandSpringStiffness(isLandscape: Boolean): Float =
+    if (isLandscape) 280f else com.agupta07505.smartisland.model.LiquidMotion.PORTRAIT_STIFFNESS
 
 internal enum class CompactNotificationShape { MiniPill, Circle }
 

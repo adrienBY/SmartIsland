@@ -20,8 +20,8 @@ class CollapseMotionTest {
     }
 
     @Test
-    fun widthBounceIsAboutFourPercent() {
-        assertEquals(0.038f, CollapseMotion.overshootFraction(CollapseMotion.WIDTH_DAMPING), 0.003f)
+    fun widthBounceIsAboutFivePercent() {
+        assertEquals(0.054f, CollapseMotion.overshootFraction(CollapseMotion.WIDTH_DAMPING), 0.003f)
     }
 
     @Test
@@ -32,10 +32,10 @@ class CollapseMotionTest {
 
     @Test
     fun widthDipStaysSmallForTheBiggestCollapse() {
-        // Card 400 dp wide collapsing to a 120 dp pill: 280 dp of travel, about 11 dp below the pill at most.
+        // Card 400 dp wide collapsing to a 120 dp pill: 280 dp of travel, about 15 dp below the pill at most.
         val dip = CollapseMotion.widthDipDp(280f)
-        assertEquals(10.7f, dip, 1f)
-        assertTrue(dip < 15f)
+        assertEquals(15.2f, dip, 1f)
+        assertTrue(dip < 18f)
         assertEquals(0f, CollapseMotion.widthDipDp(-5f), 0f)
     }
 

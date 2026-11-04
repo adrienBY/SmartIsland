@@ -34,7 +34,7 @@ object AppHandoff {
      * Grow out of the camera. Roughly the length of the launcher's app-close animation (~420 ms to settle at 1x) with
      * the small overshoot the native island has, so the pill lands while the app icon lands.
      */
-    const val GROW_DAMPING = 0.72f
+    const val GROW_DAMPING = 0.58f
     const val GROW_STIFFNESS = 170f
 
     /** Shrink into the camera: quicker and without bounce, it has to be gone before the app's window covers it. */
@@ -107,8 +107,8 @@ object AppHandoff {
 
     /** Scale of the pill's content at morph progress [p] (follows the overshoot, capped). */
     fun contentScale(p: Float): Float =
-        (CONTENT_START_SCALE + (1f - CONTENT_START_SCALE) * p).coerceIn(CONTENT_START_SCALE, 1.03f)
+        (CONTENT_START_SCALE + (1f - CONTENT_START_SCALE) * p).coerceIn(CONTENT_START_SCALE, 1.06f)
 
     /** The overshoot past the full width is damped: the native island stretches only a few dp. */
-    private const val OVERSHOOT_GAIN = 0.6f
+    private const val OVERSHOOT_GAIN = 0.85f
 }
