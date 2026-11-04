@@ -363,7 +363,10 @@ class SmartIslandOverlayService : AccessibilityService() {
                     // Going home: trust the launcher's event at once. The window list can still report the app that is
                     // closing until its close animation ends, which made its live card appear late (after the app had
                     // already shrunk away) instead of coming out of the camera while it closes (AppHandoff).
-                    val wentHome = openedPackage in cachedHomePackages()
+                    // Not while locked or while an unlock settles: the keyguard going raises launcher events even when
+                    // the phone unlocks straight into the app, and holding the launcher then would flash its card.
+                    val wentHome = !locked && !com.agupta07505.smartisland.ui.AppHandoffBus.quietNow() &&
+                        openedPackage in cachedHomePackages()
                     // The app that was just left opened again (an icon tap right after going home): drop the hold so it
                     // is not kept out, and take it now (the scan above skipped it because of the hold).
                     val cameBack = !wentHome && openedPackage == homeFastPathLeft

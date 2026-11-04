@@ -26,11 +26,22 @@ internal object AppHandoffBus {
 
     private var lastForeground: String? = null
     private var lastShown: List<HandoffCard> = emptyList()
+    private var lastLocked = false
+    private var unlockedAtMs = Long.MIN_VALUE / 2
+
+    /** No hand-off now: locked, or the unlock is still settling (also read by the service's go-home fast path). */
+    fun quietNow(): Boolean = AppHandoff.quiet(lastLocked, android.os.SystemClock.elapsedRealtime(), unlockedAtMs)
 
     /** Called with every new visible list; finds the hand-offs the foreground change caused. */
-    fun onVisible(foreground: String?, shown: List<IslandNotification>) {
+    fun onVisible(foreground: String?, shown: List<IslandNotification>, locked: Boolean) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (lastLocked && !locked) unlockedAtMs = now
+        val lockChanged = lastLocked != locked
+        lastLocked = locked
         val cards = shown.map { HandoffCard(it.key, it.packageName, ForegroundApp.isLiveMode(it.mode)) }
-        val found = AppHandoff.detect(lastForeground, foreground, lastShown, cards, android.os.SystemClock.elapsedRealtime())
+        // The lock state flipping changes which cards show on its own (lock-screen rules): never a hand-off.
+        val found = if (lockChanged || AppHandoff.quiet(locked, now, unlockedAtMs)) emptyList()
+        else AppHandoff.detect(lastForeground, foreground, lastShown, cards, now)
         lastForeground = foreground
         lastShown = cards
         // One shell, one morph: the first hand-off of the pass drives it (an app normally has one live card).

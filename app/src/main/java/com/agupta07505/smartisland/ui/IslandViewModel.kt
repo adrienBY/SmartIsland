@@ -116,7 +116,7 @@ class IslandViewModel(
     ) { list, fgPkg, s, locked ->
         filterVisible(list, fgPkg, s, locked).also { shown ->
             // Leaving / opening a live card's app: the island morphs out of / into the camera (AppHandoff).
-            AppHandoffBus.onVisible(fgPkg, shown)
+            AppHandoffBus.onVisible(fgPkg, shown, locked)
             traceHidden(list, shown) { notif ->
                 val event = com.agupta07505.smartisland.model.IslandEvent.forNotification(notif)
                 if (event != null && !s.isEventEnabled(event.id)) "event-switch-off(${event.id})"

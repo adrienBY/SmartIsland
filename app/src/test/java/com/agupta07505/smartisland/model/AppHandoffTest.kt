@@ -42,6 +42,24 @@ class AppHandoffTest {
     }
 
     @Test
+    fun lockingAndUnlockingWithMusicOnIsNeverAHandOff() {
+        // Locking inside Spotify: the foreground app is cleared and the music card shows on the lock screen.
+        assertTrue(AppHandoff.detect(spotify, null, emptyList(), listOf(music), 0L).isEmpty())
+        // Unlocking straight back into Spotify: its card hides again, without a morph.
+        assertTrue(AppHandoff.detect(null, spotify, listOf(music), emptyList(), 0L).isEmpty())
+        // Unlocking to the home screen: nothing to play either.
+        assertTrue(AppHandoff.detect(null, launcher, listOf(music), listOf(music), 0L).isEmpty())
+    }
+
+    @Test
+    fun handOffsStayQuietWhileLockedAndRightAfterAnUnlock() {
+        assertTrue(AppHandoff.quiet(locked = true, nowMs = 5_000L, unlockedAtMs = 0L))
+        assertTrue(AppHandoff.quiet(locked = false, nowMs = 1_000L, unlockedAtMs = 500L))
+        assertFalse(AppHandoff.quiet(locked = false, nowMs = 500L + AppHandoff.UNLOCK_QUIET_MS, unlockedAtMs = 500L))
+        assertFalse(AppHandoff.quiet(locked = false, nowMs = 10_000L, unlockedAtMs = Long.MIN_VALUE / 2))
+    }
+
+    @Test
     fun theArrivalPulseIsSkippedOnlyForTheMatchingRecentHandOff() {
         val e = HandoffEvent("music", HandoffDirection.OutOfApp, 1_000L)
         assertTrue(AppHandoff.explainsArrival(e, "music", 1_200L))

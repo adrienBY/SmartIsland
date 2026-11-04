@@ -41,6 +41,12 @@ object AppHandoff {
     const val SHRINK_DAMPING = 1f
     const val SHRINK_STIFFNESS = 560f
 
+    /**
+     * After an unlock the window list and the foreground app settle over several events (keyguard going, the app or
+     * launcher coming back): no hand-off is played in that time, so unlocking with music on never flickers the card.
+     */
+    const val UNLOCK_QUIET_MS = 1_200L
+
     /** An event is only matched to a card's arrival (to skip the generic pulse) within this time. */
     const val MATCH_WINDOW_MS = 1_500L
 
@@ -64,16 +70,23 @@ object AppHandoff {
         nowMs: Long
     ): List<HandoffEvent> {
         if (previousForeground == foreground) return emptyList()
+        // Locking clears the foreground app (null) and unlocking sets it again: going through "no app" is not an app
+        // switch, so neither side of a lock / unlock is a hand-off.
+        if (previousForeground.isNullOrEmpty() || foreground.isNullOrEmpty()) return emptyList()
         val before = previouslyShown.mapTo(HashSet()) { it.key }
         val after = shown.mapTo(HashSet()) { it.key }
         val out = shown.filter { c ->
-            c.live && c.key !in before && !previousForeground.isNullOrEmpty() && c.packageName == previousForeground
+            c.live && c.key !in before && c.packageName == previousForeground
         }.map { HandoffEvent(it.key, HandoffDirection.OutOfApp, nowMs) }
         val into = previouslyShown.filter { c ->
-            c.live && c.key !in after && !foreground.isNullOrEmpty() && c.packageName == foreground
+            c.live && c.key !in after && c.packageName == foreground
         }.map { HandoffEvent(it.key, HandoffDirection.IntoApp, nowMs) }
         return out + into
     }
+
+    /** True while the phone is locked, or for [UNLOCK_QUIET_MS] after it was unlocked at [unlockedAtMs]. */
+    fun quiet(locked: Boolean, nowMs: Long, unlockedAtMs: Long): Boolean =
+        locked || nowMs - unlockedAtMs in 0 until UNLOCK_QUIET_MS
 
     /** True when [event] is the hand-off that brought [key] onto the island (so its arrival pulse is skipped). */
     fun explainsArrival(event: HandoffEvent?, key: String?, nowMs: Long): Boolean =
