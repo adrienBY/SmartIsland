@@ -61,9 +61,9 @@ android {
 
     buildTypes {
         release {
-            if (hasReleaseSigning) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            // Without the author's release secrets (this fork), the release build is signed with the fork's fixed
+            // key, so the optimised APK installs as an update over the debug one and keeps its permissions.
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
