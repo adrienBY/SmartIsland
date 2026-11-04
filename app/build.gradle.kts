@@ -41,6 +41,14 @@ android {
     }
 
     signingConfigs {
+        // Fork builds (adrienBY): one fixed debug key, committed, so every CI debug APK installs as an update over the
+        // last one and keeps its accessibility / notification permissions (CI otherwise makes a new key each run).
+        getByName("debug") {
+            storeFile = file("signing/fork-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("release") {
             if (hasReleaseSigning) {
                 storeFile = file(signingStoreFile.get())
