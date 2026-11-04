@@ -81,13 +81,19 @@ internal class IslandLayout(
     private val originX: () -> Dp,
     private val originY: () -> Dp,
     private val expandProgressState: State<Float>,
-    private val hidingAlphaState: State<Float>
+    private val hidingAlphaState: State<Float>,
+    /** App hand-off morph (see AppHandoff): 0 = a core on the camera, 1 = the full pill. 1 when no hand-off runs. */
+    private val handoffState: State<Float> = androidx.compose.runtime.mutableFloatStateOf(1f),
+    /** True while the card is shrinking back into the camera because its app opened (its content is held meanwhile). */
+    private val handoffShrinkingState: State<Boolean> = androidx.compose.runtime.mutableStateOf(false)
 ) {
     val expandProgress: Float get() = expandProgressState.value
     val singleSurfaceAlpha: Float get() = singleSurfaceAlphaState.value
     /** The single island's shadow: it still fades in (the card island's shadow is off by then), the surface does not. */
     val singleShadowAlpha: Float get() = singleShadowAlphaState.value
     val hidingAlpha: Float get() = hidingAlphaState.value
+    val handoff: Float get() = handoffState.value
+    val handoffShrinking: Boolean get() = handoffShrinkingState.value
     val width: Dp get() = widthState.value
     val height: Dp get() = heightState.value
     val yOffset: Dp get() = originY()
@@ -176,7 +182,9 @@ internal fun CollapsedContentLayer(
             // Otherwise (expanding, collapsing, hidden) it keeps the settled width.
             .layout { measurable, constraints ->
                 val settled = settings.width.dp.roundToPx()
-                val follow = layout.expandProgress <= 0.001f && !layout.isHiding
+                // During the app hand-off the content keeps its settled width and the growing shell uncovers it
+                // from the middle outwards (the shell clips), instead of being squeezed into the camera core.
+                val follow = layout.expandProgress <= 0.001f && !layout.isHiding && layout.handoff >= 0.999f
                 val w = if (follow) layout.width.roundToPx().coerceAtLeast(0) else settled
                 val h = settings.height.dp.roundToPx()
                 val placeable = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(w, h))
@@ -190,7 +198,13 @@ internal fun CollapsedContentLayer(
                 val enterShare = if (maxSlidePx > 0f) {
                     (kotlin.math.abs(ui.pillEnter.value) / (maxSlidePx * PILL_ENTER_DISTANCE_FRACTION)).coerceIn(0f, 1f)
                 } else 0f
-                alpha = layout.collapsedAlpha * fade.factor * (1f - PILL_ENTER_FADE * enterShare) * (1f - ui.chimeShow.value)
+                val handoff = layout.handoff
+                val handoffScale = if (handoff >= 1f) 1f else com.agupta07505.smartisland.model.AppHandoff.contentScale(handoff)
+                scaleX = handoffScale
+                scaleY = handoffScale
+                val handoffAlpha = if (handoff >= 1f) 1f else com.agupta07505.smartisland.model.AppHandoff.contentAlpha(handoff)
+                alpha = layout.collapsedAlpha * fade.factor * handoffAlpha *
+                    (1f - PILL_ENTER_FADE * enterShare) * (1f - ui.chimeShow.value)
             }
     ) {
         IslandCollapsedContent(
@@ -623,14 +637,23 @@ internal fun rememberIslandLayout(
         if (arrivalKey == null || expanded || holdArrivalPulse || (isLandscape && !landscapePillStretch)) return@LaunchedEffect
         val now = android.os.SystemClock.elapsedRealtime()
         if (!com.agupta07505.smartisland.model.PillPulse.allowed(now, lastPulseAt[0])) return@LaunchedEffect
+        // A card that comes out of the camera because its app was left already has its own entrance (the hand-off).
+        if (com.agupta07505.smartisland.model.AppHandoff.explainsArrival(AppHandoffBus.event, arrivalKey, now)) return@LaunchedEffect
         lastPulseAt[0] = now
         pulse.snapTo(0f)
         pulse.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = animSpeed.stiffness(PILL_PULSE_OUT_STIFFNESS)))
         pulse.animateTo(0f, spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy, stiffness = animSpeed.stiffness(PILL_PULSE_BACK_STIFFNESS)))
     }
     LaunchedEffect(expanded, holdArrivalPulse) { if (expanded || holdArrivalPulse) pulse.snapTo(0f) }
-    val pulseWidthState = remember(widthState, pulse, settings.width) {
-        derivedStateOf { widthState.value + (settings.width * PILL_PULSE_WIDTH_FRACTION * pulse.value).dp }
+    val handoff = rememberAppHandoff(settings, notifications, expanded, isLandscape, animSpeed)
+    val pulseWidthState = remember(widthState, pulse, settings.width, settings.height) {
+        derivedStateOf {
+            val base = widthState.value + (settings.width * PILL_PULSE_WIDTH_FRACTION * pulse.value).dp
+            val p = handoff.progress.value
+            // Only the collapsed pill morphs; the camera core is a circle as tall as the pill.
+            if (p == 1f || !handoff.shellMorph.value || expandProgressState.value > 0.001f) base
+            else com.agupta07505.smartisland.model.AppHandoff.width(settings.height, base.value, p).dp
+        }
     }
 
     return IslandLayout(
@@ -670,8 +693,127 @@ internal fun rememberIslandLayout(
         originX = originX,
         originY = originY,
         expandProgressState = expandProgressState,
-        hidingAlphaState = hidingAlphaState
+        hidingAlphaState = hidingAlphaState,
+        handoffState = handoff.progress,
+        handoffShrinkingState = handoff.shrinking
     )
+}
+
+internal class AppHandoffMotion(
+    /** The morph as drawn this frame: 0 = a core on the camera, 1 = the full pill. */
+    val progress: State<Float>,
+    /** The card is going back into the camera: its content is held on the shell until it is in. */
+    val shrinking: State<Boolean>,
+    /**
+     * The shell itself grows out of / shrinks into the camera. Only when the island is hidden with no card
+     * (hide when idle): a visible idle pill keeps its width and just its content comes out of the middle.
+     */
+    val shellMorph: State<Boolean>
+)
+
+/**
+ * Runs the app hand-off morph (model/AppHandoff.kt): out of the camera when a live card's app is left, back into it
+ * when the app opens (only when the island then hides, otherwise the empty pill stays and the content just fades).
+ *
+ * The card arrives (or goes) in the same composition that first sees the event, one frame before an effect could start
+ * the spring, so until the effect has taken the event ([taken]) the drawn progress is already where the spring starts.
+ */
+@Composable
+private fun rememberAppHandoff(
+    settings: SmartIslandSettings,
+    notifications: List<IslandNotification>,
+    expanded: Boolean,
+    isLandscape: Boolean,
+    animSpeed: com.agupta07505.smartisland.util.AnimationSpeed
+): AppHandoffMotion {
+    val anim = remember { androidx.compose.animation.core.Animatable(1f) }
+    val taken = remember { androidx.compose.runtime.mutableLongStateOf(Long.MIN_VALUE) }
+    val shrinkRunning = remember { androidx.compose.runtime.mutableStateOf(false) }
+    val shellMorph = remember { androidx.compose.runtime.mutableStateOf(false) }
+    val cardsNow by androidx.compose.runtime.rememberUpdatedState(notifications)
+    val hideWhenIdle by androidx.compose.runtime.rememberUpdatedState(settings.hideWhenIdle)
+    val expandedNow by androidx.compose.runtime.rememberUpdatedState(expanded)
+    val landscapeNow by androidx.compose.runtime.rememberUpdatedState(isLandscape)
+
+    // One rule for both the effect and the drawing, so they can never disagree. A stale event (the overlay coming
+    // back long after it) is never played.
+    fun fresh(e: com.agupta07505.smartisland.model.HandoffEvent): Boolean =
+        android.os.SystemClock.elapsedRealtime() - e.atMs <= com.agupta07505.smartisland.model.AppHandoff.MATCH_WINDOW_MS
+    fun grows(e: com.agupta07505.smartisland.model.HandoffEvent?): Boolean =
+        e != null && e.direction == com.agupta07505.smartisland.model.HandoffDirection.OutOfApp && fresh(e) &&
+            !expandedNow && !landscapeNow &&
+            // Only onto a pill that carries nothing else (another card's pill does not drop back into the camera).
+            cardsNow.any { it.key == e.key } && cardsNow.none { it.key != e.key }
+    fun shrinks(e: com.agupta07505.smartisland.model.HandoffEvent?): Boolean =
+        e != null && e.direction == com.agupta07505.smartisland.model.HandoffDirection.IntoApp && fresh(e) &&
+            !expandedNow && !landscapeNow && hideWhenIdle && cardsNow.isEmpty()
+
+    val progress = remember {
+        derivedStateOf {
+            val e = AppHandoffBus.event
+            if (e != null && e.atMs != taken.longValue && grows(e) && anim.value >= 1f) 0f else anim.value
+        }
+    }
+    val shrinking = remember {
+        derivedStateOf {
+            val e = AppHandoffBus.event
+            shrinkRunning.value || (e != null && e.atMs != taken.longValue && shrinks(e))
+        }
+    }
+    val shellMorphNow = remember {
+        derivedStateOf {
+            val e = AppHandoffBus.event
+            if (e != null && e.atMs != taken.longValue) {
+                if (grows(e)) hideWhenIdle else if (shrinks(e)) true else shellMorph.value
+            } else shellMorph.value
+        }
+    }
+
+    val grow = spring<Float>(
+        dampingRatio = com.agupta07505.smartisland.model.AppHandoff.GROW_DAMPING,
+        stiffness = animSpeed.stiffness(com.agupta07505.smartisland.model.AppHandoff.GROW_STIFFNESS)
+    )
+    val shrink = spring<Float>(
+        dampingRatio = com.agupta07505.smartisland.model.AppHandoff.SHRINK_DAMPING,
+        stiffness = animSpeed.stiffness(com.agupta07505.smartisland.model.AppHandoff.SHRINK_STIFFNESS)
+    )
+    val event = AppHandoffBus.event
+    LaunchedEffect(event) {
+        val e = event ?: return@LaunchedEffect
+        val grow0 = grows(e)
+        val shrink0 = shrinks(e)
+        if (grow0) {
+            shellMorph.value = hideWhenIdle
+            // From where a reversed shrink left off, else from the camera.
+            if (anim.value >= 1f) anim.snapTo(0f)
+        } else if (shrink0) {
+            shellMorph.value = true
+            shrinkRunning.value = true
+        }
+        // Taken: from here the drawing follows the spring itself (set after the snap, so no frame shows it at 1).
+        taken.longValue = e.atMs
+        if (grow0) anim.animateTo(1f, grow)
+        if (shrink0) {
+            try {
+                anim.animateTo(0f, shrink)
+            } finally {
+                shrinkRunning.value = false
+            }
+        }
+    }
+    // Expanding or rotating: no core may be left behind.
+    LaunchedEffect(expanded, isLandscape) {
+        if ((expanded || isLandscape) && anim.value != 1f) {
+            shrinkRunning.value = false
+            anim.snapTo(1f)
+        }
+    }
+    // Any card arriving on a pill that went into the camera brings it back out.
+    val hasCards = notifications.isNotEmpty()
+    LaunchedEffect(hasCards) {
+        if (hasCards && !anim.isRunning && anim.value < 1f) anim.animateTo(1f, grow)
+    }
+    return AppHandoffMotion(progress, shrinking, shellMorphNow)
 }
 
 /** [factor] reads the fade where it is drawn (a graphicsLayer block), so the fade does not recompose the overlay every frame. */

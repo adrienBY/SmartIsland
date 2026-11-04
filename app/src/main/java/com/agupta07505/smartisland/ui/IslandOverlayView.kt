@@ -339,7 +339,9 @@ fun IslandOverlayView(
     val collapsedContentFade = rememberCollapsedContentFade(
         activeNotification,
         settings.animationSpeed(isLandscape),
-        fadeOut = pillExit.leavingNow
+        // The landscape pill sliding away, or a card going back into the camera because its app opened (AppHandoff):
+        // the content stays on the shell and leaves with it.
+        fadeOut = pillExit.leavingNow || layout.handoffShrinking
     )
     val secondary = rememberIslandSecondary(
         settings = settings,

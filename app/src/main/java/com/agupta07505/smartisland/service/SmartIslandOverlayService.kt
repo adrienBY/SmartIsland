@@ -360,7 +360,22 @@ class SmartIslandOverlayService : AccessibilityService() {
                     // The window list decides the foreground app; the opened window's package is only the fallback
                     // when the list cannot be read (a dialog or floating window must not replace the real app).
                     android.util.Log.i("SmartIslandExempt", "event opened=$openedPackage fromWindows=$foregroundFromWindows")
-                    if (!foregroundFromWindows) viewModel.foregroundPackage.value = openedPackage
+                    // Going home: trust the launcher's event at once. The window list can still report the app that is
+                    // closing until its close animation ends, which made its live card appear late (after the app had
+                    // already shrunk away) instead of coming out of the camera while it closes (AppHandoff).
+                    val wentHome = openedPackage in cachedHomePackages()
+                    // The app that was just left opened again (an icon tap right after going home): drop the hold so it
+                    // is not kept out, and take it now (the scan above skipped it because of the hold).
+                    val cameBack = !wentHome && openedPackage == homeFastPathLeft
+                    if (cameBack) homeFastPathLeft = null
+                    if (!foregroundFromWindows || wentHome || cameBack) {
+                        val left = viewModel.foregroundPackage.value
+                        if (wentHome && left != null && left != openedPackage) {
+                            homeFastPathLeft = left
+                            homeFastPathAtMs = android.os.SystemClock.elapsedRealtime()
+                        }
+                        viewModel.foregroundPackage.value = openedPackage
+                    }
                     updateWindowLayoutParams(isWindowExpanded, viewModel.displaySettings.value)
                     // Only ordinary alerts are dropped; running timers, recorders, calls, downloads
                     // and navigation stay on the island (the repository enforces this).
@@ -404,6 +419,11 @@ class SmartIslandOverlayService : AccessibilityService() {
             appWindows.any { it.isApplicationType && it.packageName.isNullOrEmpty() && (it.isFocused || it.isActive) }
         ) return false
         val next = picked ?: if (locked) null else viewModel.foregroundPackage.value
+        // Just went home: a scan that still sees the closing app's window must not bring that app back (its card
+        // would hide again mid hand-off).
+        if (next != null && next == homeFastPathLeft &&
+            android.os.SystemClock.elapsedRealtime() - homeFastPathAtMs < HOME_FAST_PATH_HOLD_MS
+        ) return true
         android.util.Log.i(
             "SmartIslandExempt",
             "scan picked=$picked usage=$fromUsage next=$next was=${viewModel.foregroundPackage.value} locked=$locked windows=" +
@@ -423,6 +443,20 @@ class SmartIslandOverlayService : AccessibilityService() {
     }
 
     private var lastKeyguardPollMs = 0L
+    private var homeFastPathLeft: String? = null
+    private var homeFastPathAtMs = 0L
+    private var homePackagesCache: Set<String> = emptySet()
+    private var homePackagesCacheAtMs = 0L
+
+    /** [homePackageNames] is a package-manager query; window events come in bursts, so it is cached for a minute. */
+    private fun cachedHomePackages(): Set<String> {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (homePackagesCache.isEmpty() || now - homePackagesCacheAtMs > HOME_PACKAGES_CACHE_MS) {
+            homePackagesCache = homePackageNames()
+            homePackagesCacheAtMs = now
+        }
+        return homePackagesCache
+    }
     private var lastWindowRefreshMs = 0L
     private var windowRefreshPending = false
     private val windowHandler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
@@ -2251,6 +2285,9 @@ class SmartIslandOverlayService : AccessibilityService() {
         private const val INPUT_METHOD_CACHE_MS = 60_000L
         private const val KEYGUARD_POLL_MS = 1_000L
         private const val WINDOW_REFRESH_MIN_MS = 120L
+        /** After going home, scans that still see the app that was left are ignored for this long (its close animation). */
+        private const val HOME_FAST_PATH_HOLD_MS = 700L
+        private const val HOME_PACKAGES_CACHE_MS = 60_000L
         private const val SETTLE_SCAN_FIRST_MS = 400L
         private const val SETTLE_SCAN_SECOND_MS = 1_100L
         private const val WINDOW_PACKAGE_CACHE_MAX = 96
