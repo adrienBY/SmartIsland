@@ -446,6 +446,8 @@ class SmartIslandOverlayService : AccessibilityService() {
     }
 
     private var lastKeyguardPollMs = 0L
+    /** The overlay was last hidden because of the lock screen (so showing it again is an unlock). */
+    private var lastHiddenByLock = false
     private var homeFastPathLeft: String? = null
     private var homeFastPathAtMs = 0L
     private var homePackagesCache: Set<String> = emptySet()
@@ -1595,9 +1597,16 @@ class SmartIslandOverlayService : AccessibilityService() {
         val isStatic = !isHidden && viewModel.exemptionNow() == com.agupta07505.smartisland.model.ExemptMode.Static
 
         val targetVisibility = if (isHidden) android.view.View.GONE else android.view.View.VISIBLE
+        val hiddenByLock = !settings.showOnLockScreen && isLocked
         if (view.visibility != targetVisibility) {
+            // Back after the lock screen hid it: the island grows out of the camera instead of popping in at full
+            // size (armed before the view shows, so its first frame already starts from the camera).
+            if (targetVisibility == android.view.View.VISIBLE && lastHiddenByLock) {
+                com.agupta07505.smartisland.ui.AppHandoffBus.reveal()
+            }
             view.visibility = targetVisibility
         }
+        lastHiddenByLock = hiddenByLock
 
         val isSplitMode = !isStatic && com.agupta07505.smartisland.model.hasSecondaryCutout(
             com.agupta07505.smartisland.model.cutoutCardCount(

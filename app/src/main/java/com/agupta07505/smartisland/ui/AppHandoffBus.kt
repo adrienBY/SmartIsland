@@ -32,6 +32,11 @@ internal object AppHandoffBus {
     /** No hand-off now: locked, or the unlock is still settling (also read by the service's go-home fast path). */
     fun quietNow(): Boolean = AppHandoff.quiet(lastLocked, android.os.SystemClock.elapsedRealtime(), unlockedAtMs)
 
+    /** The overlay window is about to show again after the lock screen hid it: the island grows out of the camera. */
+    fun reveal() {
+        event = HandoffEvent("", com.agupta07505.smartisland.model.HandoffDirection.Reveal, android.os.SystemClock.elapsedRealtime())
+    }
+
     /** Called with every new visible list; finds the hand-offs the foreground change caused. */
     fun onVisible(foreground: String?, shown: List<IslandNotification>, locked: Boolean) {
         val now = android.os.SystemClock.elapsedRealtime()

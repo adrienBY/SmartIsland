@@ -83,6 +83,10 @@ internal fun Modifier.islandMainGestures(
         .onGloballyPositioned { ui.gestureOrigin = it.positionInWindow() }
         .pointerInput(displayMetrics.density, isInputActive, isLandscape, centreOverlapsCutout, pillHasContent) {
             if (isInputActive) return@pointerInput
+            // The handler restarts when its keys change (the pill gaining or losing content, rotation...), which can
+            // cancel a gesture mid-drag before its lift code runs: whatever the finger left on the pill (lean,
+            // stretch) is let go here instead of staying stuck off its place.
+            try {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 if (ui.handleOwnsTouch) {
@@ -691,6 +695,16 @@ internal fun Modifier.islandMainGestures(
                 }
                 if (ui.deadZone.value != 0f) {
                     scope.launch { ui.deadZone.animateTo(0f, swipeCalmSpring()) }
+                }
+            }
+            } finally {
+                easeBackPillMotion(ui, scope)
+                releasePillStretch(ui, scope)
+                if (ui.pillArm.value != 0f || ui.deadZone.value != 0f) {
+                    scope.launch {
+                        ui.pillArm.animateTo(0f, swipeCalmSpring())
+                        ui.deadZone.animateTo(0f, swipeCalmSpring())
+                    }
                 }
             }
         }

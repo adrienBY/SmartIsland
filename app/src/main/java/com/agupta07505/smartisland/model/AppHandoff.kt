@@ -20,7 +20,13 @@ enum class HandoffDirection {
     OutOfApp,
 
     /** The card's app came to the foreground: its card goes back into the camera. */
-    IntoApp
+    IntoApp,
+
+    /**
+     * The whole island shows again after the lock screen hid it ("show on lock screen" off): it grows out of the
+     * camera instead of appearing at full size in one frame. Not tied to a card ([HandoffEvent.key] is empty).
+     */
+    Reveal
 }
 
 data class HandoffEvent(val key: String, val direction: HandoffDirection, val atMs: Long)

@@ -753,7 +753,13 @@ private fun rememberAppHandoff(
     // back long after it) is never played.
     fun fresh(e: com.agupta07505.smartisland.model.HandoffEvent): Boolean =
         android.os.SystemClock.elapsedRealtime() - e.atMs <= com.agupta07505.smartisland.model.AppHandoff.MATCH_WINDOW_MS
+    fun reveals(e: com.agupta07505.smartisland.model.HandoffEvent?): Boolean =
+        e != null && e.direction == com.agupta07505.smartisland.model.HandoffDirection.Reveal && fresh(e) &&
+            !expandedNow && !landscapeNow &&
+            // The Face ID / fingerprint animation is its own entrance.
+            !FaceIdShell.covering
     fun grows(e: com.agupta07505.smartisland.model.HandoffEvent?): Boolean =
+        reveals(e) ||
         e != null && e.direction == com.agupta07505.smartisland.model.HandoffDirection.OutOfApp && fresh(e) &&
             !expandedNow && !landscapeNow &&
             // Only onto a pill that carries nothing else (another card's pill does not drop back into the camera).
@@ -778,7 +784,7 @@ private fun rememberAppHandoff(
         derivedStateOf {
             val e = AppHandoffBus.event
             if (e != null && e.atMs != taken.longValue) {
-                if (grows(e)) hideWhenIdle else if (shrinks(e)) true else shellMorph.value
+                if (reveals(e)) true else if (grows(e)) hideWhenIdle else if (shrinks(e)) true else shellMorph.value
             } else shellMorph.value
         }
     }
@@ -797,7 +803,7 @@ private fun rememberAppHandoff(
         val grow0 = grows(e)
         val shrink0 = shrinks(e)
         if (grow0) {
-            shellMorph.value = hideWhenIdle
+            shellMorph.value = reveals(e) || hideWhenIdle
             // From where a reversed shrink left off, else from the camera.
             if (anim.value >= 1f) anim.snapTo(0f)
         } else if (shrink0) {
