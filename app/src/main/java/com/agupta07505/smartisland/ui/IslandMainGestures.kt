@@ -97,6 +97,10 @@ internal fun Modifier.islandMainGestures(
                 ui.cardBackJob?.cancel()
                 ui.cardWaitJob?.cancel()
                 ui.pillReleaseJob?.cancel()
+                // A new touch catches the pill mid-wobble: it settles from there instead of the finger fighting it.
+                ui.pillStretchJob?.cancel()
+                ui.pillStretchX = 0f
+                ui.pillStretchY = 0f
                 // Read once per touch so the distances do not change under the finger.
                 val sensitivity = GestureSensitivity.fromId(cb.currentSettings.gestureSensitivity)
                 val tapSlop = sensitivity.scaled(10f) * displayMetrics.density
@@ -586,6 +590,15 @@ internal fun Modifier.islandMainGestures(
                                 }
                             } else {
                                 ui.pillDragOffsetX = softFollow(dragAccumulatorX, 0.35f, 24f * displayMetrics.density)
+                                // Liquid Glass: the pill is pulled out towards the finger as well as leaning with it.
+                                ui.pillStretchX = com.agupta07505.smartisland.model.LiquidStretch.pull(
+                                    dragAccumulatorX, com.agupta07505.smartisland.model.LiquidStretch.MAX_X_DP * displayMetrics.density
+                                )
+                                // A swipe down that already pulls the pill taller (SwipeDownPull) is not stretched twice.
+                                ui.pillStretchY = if (dragAccumulatorY > 0f && ui.swipeDownPull > 0f) 0f
+                                else com.agupta07505.smartisland.model.LiquidStretch.pull(
+                                    dragAccumulatorY, com.agupta07505.smartisland.model.LiquidStretch.MAX_Y_DP * displayMetrics.density
+                                )
                                 ui.dragOffset = softFollow(
                                     dragAccumulatorY, 0.35f, SwipeFeel.PILL_LEAN_Y_MAX_DP * displayMetrics.density
                                 )
@@ -648,6 +661,7 @@ internal fun Modifier.islandMainGestures(
                         ui.pillContentDragX = 0f
                         ui.pillDragOffsetX = 0f
                         ui.dragOffset = 0f
+                        releasePillStretch(ui, scope)
                         ui.cardDragX = 0f
                         ui.swipeDownPull = 0f
                         ui.pendingCardEnterSign = 0
@@ -666,6 +680,7 @@ internal fun Modifier.islandMainGestures(
                 ui.stepDrag.swipeNeighbour = 0
                 // The incoming card (if the swipe changed it) takes over the content; otherwise it eases back.
                 easeBackPillMotion(ui, scope)
+                releasePillStretch(ui, scope)
                 // Expanded card: the incoming card (if the swipe changed it) takes over from where the finger left it;
                 // otherwise (cancelled, or an action that keeps the card) it eases back.
                 if (ui.pendingCardEnterSign == 0 && ui.cardDragX != 0f) {
@@ -679,6 +694,34 @@ internal fun Modifier.islandMainGestures(
                 }
             }
         }
+}
+
+/**
+ * The stretched pill lets go: it springs back with a jelly wobble (through the middle and out the other way a little,
+ * two or three times) instead of the calm ease-back of the lean.
+ */
+private fun releasePillStretch(ui: IslandInteractionState, scope: CoroutineScope) {
+    val x0 = ui.pillStretchX
+    val y0 = ui.pillStretchY
+    if (x0 == 0f && y0 == 0f) return
+    ui.pillStretchJob?.cancel()
+    ui.pillStretchJob = scope.launch {
+        try {
+            androidx.compose.animation.core.Animatable(1f).animateTo(
+                0f,
+                spring(
+                    dampingRatio = com.agupta07505.smartisland.model.LiquidStretch.RELEASE_DAMPING,
+                    stiffness = com.agupta07505.smartisland.model.LiquidStretch.RELEASE_STIFFNESS
+                )
+            ) {
+                ui.pillStretchX = x0 * value
+                ui.pillStretchY = y0 * value
+            }
+        } finally {
+            ui.pillStretchX = 0f
+            ui.pillStretchY = 0f
+        }
+    }
 }
 
 /** The spring a swipe's drag returns to rest with: no overshoot (see [SwipeFeel.EASE_BACK_STIFFNESS]). */

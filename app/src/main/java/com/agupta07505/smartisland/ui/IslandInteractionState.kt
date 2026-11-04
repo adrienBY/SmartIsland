@@ -39,6 +39,10 @@ internal class IslandInteractionState {
     var cornerPillDragX by mutableFloatStateOf(0f)
     var cornerPillDragY by mutableFloatStateOf(0f)
     var pillContentDragX by mutableFloatStateOf(0f)
+    /** Liquid stretch of the collapsed pill under the finger, px (model/LiquidStretch.kt). Read in the shell's layer. */
+    var pillStretchX by mutableFloatStateOf(0f)
+    var pillStretchY by mutableFloatStateOf(0f)
+    var pillStretchJob: kotlinx.coroutines.Job? = null
     /** 0..1: the pill swipe is armed (lifting now fires). Drives the small swell that says so. */
     val pillArm = Animatable(0f)
     /**

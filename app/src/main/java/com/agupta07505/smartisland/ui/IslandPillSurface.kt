@@ -123,6 +123,16 @@ internal fun Modifier.islandPillSurface(
                 scaleX *= armSwell * com.agupta07505.smartisland.util.SwipeDownPull.pillScaleX(pull)
                 pullScaleY = com.agupta07505.smartisland.util.SwipeDownPull.pillScaleY(pull)
                 scaleY *= armSwell * pullScaleY
+                // Liquid Glass stretch towards the finger (model/LiquidStretch.kt), thinner across, wobbling back on release.
+                val ex = ui.pillStretchX
+                val ey = ui.pillStretchY
+                if (ex != 0f || ey != 0f) {
+                    val (sx, sy) = com.agupta07505.smartisland.model.LiquidStretch.scale(ex, ey, size.width, size.height)
+                    scaleX *= sx
+                    scaleY *= sy
+                    translationX += com.agupta07505.smartisland.model.LiquidStretch.anchorShiftPx(sx, size.width, ex)
+                    translationY += com.agupta07505.smartisland.model.LiquidStretch.anchorShiftPx(sy, size.height, ey)
+                }
             } else {
                 val deadShrink = 1f - EXPANDED_DEAD_SHRINK * ui.deadZone.value * deadWeight
                 // The floating-window handle: narrower and taller with the pull, squeezing the content (the shell's layer scales it all).
