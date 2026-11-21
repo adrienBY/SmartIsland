@@ -19,6 +19,9 @@ object IslandPriority {
         IslandMode.AudioRecording,
         IslandMode.Hotspot,
         IslandMode.Flashlight -> 20
+        // Always on while the app runs (Phosphore's moments are on all day): it yields the main cutout to anything
+        // happening now, like a paused player.
+        IslandMode.LiveCard -> 35
         IslandMode.Music -> 30
         IslandMode.DownloadUpload -> 40
         IslandMode.Notification,

@@ -938,6 +938,8 @@ internal fun clampCardHeightForMode(mode: IslandMode?, height: Dp): Dp = when (m
     IslandMode.Navigation -> height.coerceIn(NAVIGATION_EXPANDED_HEIGHT, NAVIGATION_EXPANDED_HEIGHT + 20.dp)
     IslandMode.DownloadUpload -> height.coerceIn(120.dp, 195.dp)
     IslandMode.Hotspot -> height.coerceIn(120.dp, 195.dp)
+    // Header, up to three rows of thumbnails and the buttons.
+    IslandMode.LiveCard -> height.coerceIn(110.dp, 400.dp)
     IslandMode.Bluetooth -> height.coerceIn(72.dp, 130.dp)
     IslandMode.Flashlight -> height.coerceIn(72.dp, 130.dp)
     IslandMode.ScreenRecording -> height.coerceIn(72.dp, 130.dp)
@@ -1142,6 +1144,13 @@ internal fun ExpandedCardPage(
                     onCollapse = onCollapse,
                     settings = settings
                 )
+                IslandMode.LiveCard -> LiveCardExpanded(
+                    notification = notification,
+                    bottomPadding = bottomPadding,
+                    onOpenNotification = { onOpenNotification(notification) },
+                    onCollapse = onCollapse,
+                    settings = settings
+                )
                 IslandMode.Bluetooth -> BluetoothExpanded(
                     notification = notification,
                     bottomPadding = bottomPadding,
@@ -1197,7 +1206,8 @@ internal fun ExpandedCardPage(
  * music card has its own artwork rule and is handled inside it.
  */
 internal fun notificationHasPictureBackdrop(notification: IslandNotification, settings: SmartIslandSettings): Boolean {
-    if (!settings.enableNotificationBackdrop || notification.mode == IslandMode.Music) return false
+    // Live cards keep the plain black of the LEDs they show.
+    if (!settings.enableNotificationBackdrop || notification.mode == IslandMode.Music || notification.mode == IslandMode.LiveCard) return false
     val artwork = notification.largeIcon ?: notification.icon
     return artwork != null && !artwork.isRecycled
 }

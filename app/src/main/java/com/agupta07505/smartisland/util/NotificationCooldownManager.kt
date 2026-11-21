@@ -141,6 +141,7 @@ object NotificationCooldownManager {
             mode == IslandMode.Music ||
             mode == IslandMode.Navigation ||
             mode == IslandMode.Hotspot ||
+            mode == IslandMode.LiveCard ||
             // Progress updates arrive every second or so; counting them as spam would hold back the "download finished" notification.
             mode == IslandMode.DownloadUpload ||
             mode == IslandMode.Battery ||

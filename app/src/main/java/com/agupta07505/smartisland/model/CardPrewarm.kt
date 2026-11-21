@@ -16,6 +16,7 @@ object CardPrewarm {
         IslandMode.Navigation,
         IslandMode.DownloadUpload,
         IslandMode.Hotspot,
+        IslandMode.LiveCard,
         IslandMode.Flashlight,
         // Pulse and clock cards: their endless animations stop while the card waits, so they cost a composition, not a
         // frame loop.

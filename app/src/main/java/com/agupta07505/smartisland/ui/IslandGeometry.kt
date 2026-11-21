@@ -175,6 +175,7 @@ internal fun defaultEstimatedHeightForMode(mode: IslandMode?): Dp {
         IslandMode.LiveActivity -> 180.dp
         IslandMode.Navigation -> com.agupta07505.smartisland.ui.expanded.NAVIGATION_EXPANDED_HEIGHT
         IslandMode.DownloadUpload, IslandMode.Hotspot -> 160.dp
+        IslandMode.LiveCard -> 190.dp
         IslandMode.Bluetooth, IslandMode.Flashlight, IslandMode.ScreenRecording, IslandMode.AudioRecording,
         IslandMode.Timer, IslandMode.Stopwatch -> 115.dp
         IslandMode.Empty, null -> 135.dp

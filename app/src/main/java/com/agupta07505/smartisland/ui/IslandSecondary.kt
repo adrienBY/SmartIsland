@@ -449,6 +449,9 @@ internal fun SecondaryBubbleContent(
         IslandMode.Stopwatch -> {
             StopwatchCollapsedGlyph(notification = notification, settings = settings)
         }
+        IslandMode.LiveCard -> {
+            com.agupta07505.smartisland.ui.expanded.LiveCardCollapsedGlyph(notification = notification, settings = settings)
+        }
         IslandMode.Notification, IslandMode.DownloadUpload, IslandMode.Empty -> {
             NotificationGlyph(notification = notification, settings = settings)
         }

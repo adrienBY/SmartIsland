@@ -57,7 +57,7 @@ object NotificationFilter {
         val mode = notification.toIslandMode(sbn, liveActivitiesEnabled, navigationEnabled, deviceType)
 
         // Hotspot, Screen Recording, Timer, Stopwatch notifications are allowed even if posted by system/OEM frameworks
-        if (mode == IslandMode.Hotspot || mode == IslandMode.ScreenRecording || mode == IslandMode.AudioRecording || mode == IslandMode.IncomingCall || mode == IslandMode.Timer || mode == IslandMode.Stopwatch) {
+        if (mode == IslandMode.LiveCard || mode == IslandMode.Hotspot || mode == IslandMode.ScreenRecording || mode == IslandMode.AudioRecording || mode == IslandMode.IncomingCall || mode == IslandMode.Timer || mode == IslandMode.Stopwatch) {
             if (packageName == "com.agupta07505.smartisland") return "own-package"
             if (packageName in disabledNotificationPackages) return "app-disabled-in-settings"
         } else {
@@ -124,7 +124,7 @@ object NotificationFilter {
                 (notification.extras?.getInt(Notification.EXTRA_PROGRESS_MAX, 0) ?: 0) > 0
             )
             val isAlarmNotification = TimerStopwatchParser.isAlarm(notification, packageName)
-            if (!isProgressNotification && !isAlarmNotification && mode != IslandMode.IncomingCall && mode != IslandMode.Music && mode != IslandMode.LiveActivity && mode != IslandMode.Navigation && mode != IslandMode.DownloadUpload && mode != IslandMode.Hotspot && mode != IslandMode.ScreenRecording && mode != IslandMode.AudioRecording && mode != IslandMode.Timer && mode != IslandMode.Stopwatch) {
+            if (!isProgressNotification && !isAlarmNotification && mode != IslandMode.IncomingCall && mode != IslandMode.Music && mode != IslandMode.LiveActivity && mode != IslandMode.LiveCard && mode != IslandMode.Navigation && mode != IslandMode.DownloadUpload && mode != IslandMode.Hotspot && mode != IslandMode.ScreenRecording && mode != IslandMode.AudioRecording && mode != IslandMode.Timer && mode != IslandMode.Stopwatch) {
                 return "ongoing-not-a-live-card"
             }
         }
@@ -223,6 +223,9 @@ fun Notification.toIslandMode(
 ): IslandMode {
     val packageName = sbn?.packageName.orEmpty()
     val effectiveDevice = OemDeviceRules.resolveEffectiveDevice(deviceType)
+
+    // The app asked for a live card itself (util/LiveCardContract.kt): nothing else decides.
+    if (LiveCardContract.isLiveCard(this)) return IslandMode.LiveCard
 
     val titleText = "${extras?.getCharSequence(Notification.EXTRA_TITLE)} ${extras?.getCharSequence(Notification.EXTRA_TEXT)} ${extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)}".lowercase()
 
