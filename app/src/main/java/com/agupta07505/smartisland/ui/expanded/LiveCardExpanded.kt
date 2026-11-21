@@ -108,17 +108,14 @@ internal fun LiveCardCollapsedGlyph(notification: IslandNotification?, settings:
     }
 }
 
-/** The pill's right slot: the app's word or two (what is on now). */
+/** The pill's right slot: the same dot as an ordinary notification (the picture on the left says what is on). */
 @Composable
-internal fun LiveCardCollapsedRight(notification: IslandNotification?) {
-    val text = notification?.liveShortText?.takeIf { it.isNotBlank() } ?: return
-    Text(
-        text = text,
-        color = Color.White.copy(alpha = 0.9f),
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis
+internal fun LiveCardCollapsedRight(settings: SmartIslandSettings) {
+    Box(
+        modifier = Modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(Color(settings.notificationDotColor))
     )
 }
 
