@@ -19,12 +19,11 @@ object IslandPriority {
         IslandMode.AudioRecording,
         IslandMode.Hotspot,
         IslandMode.Flashlight -> 20
-        // Always on while the app runs (Phosphore's moments are on all day): it yields the main cutout to anything
-        // happening now, like a paused player.
-        IslandMode.LiveCard -> 35
         IslandMode.Music -> 30
         IslandMode.DownloadUpload -> 40
         IslandMode.Notification,
+        // An app's live card (Phosphore) behaves like a notification: it is not a live event that holds the cutout.
+        IslandMode.LiveCard,
         IslandMode.Battery,
         IslandMode.Bluetooth,
         IslandMode.Empty -> 50
@@ -38,7 +37,9 @@ object IslandPriority {
      * running: notifications, paused music, stopwatch / timer / recorders and transfers.
      */
     fun canIdleOut(n: IslandNotification): Boolean = when (n.mode) {
-        IslandMode.Notification -> true
+        // A live card pops up when the app changes it (new title / text) and times out like a notification; a tap on
+        // the idle cutout brings it back.
+        IslandMode.Notification, IslandMode.LiveCard -> true
         IslandMode.Music -> !n.mediaIsPlaying
         IslandMode.Stopwatch,
         IslandMode.Timer,
@@ -53,7 +54,7 @@ object IslandPriority {
      * Over a live event they wait in the secondary cutout.
      */
     fun popsUp(mode: IslandMode): Boolean = when (mode) {
-        IslandMode.Notification, IslandMode.Battery, IslandMode.Bluetooth -> true
+        IslandMode.Notification, IslandMode.LiveCard, IslandMode.Battery, IslandMode.Bluetooth -> true
         else -> false
     }
 

@@ -313,7 +313,7 @@ fun IslandCollapsedContent(
                     StopwatchTimer(notification = notification, color = Color(settings.stopwatchColor))
                 }
                 IslandMode.LiveCard -> {
-                    com.agupta07505.smartisland.ui.expanded.LiveCardCollapsedRight(notification = notification)
+                    com.agupta07505.smartisland.ui.expanded.LiveCardCollapsedRight(settings = settings)
                 }
                 IslandMode.Empty -> IdleWidgetSlot(idleWidget, right = true)
             }
