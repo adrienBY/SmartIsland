@@ -66,7 +66,7 @@ enum class IslandEvent(val id: String, val label: String, val shortLabel: String
             IslandMode.Notification -> NOTIFICATION
             IslandMode.IncomingCall -> CALL
             IslandMode.Music -> MUSIC
-            IslandMode.LiveActivity -> LIVE_ACTIVITY
+            IslandMode.LiveActivity, IslandMode.LiveCard -> LIVE_ACTIVITY
             IslandMode.Navigation -> NAVIGATION
             IslandMode.DownloadUpload -> forTransfer(transferKind)
             IslandMode.Hotspot -> HOTSPOT
@@ -103,7 +103,7 @@ enum class IslandEvent(val id: String, val label: String, val shortLabel: String
                 "battery_low" -> LOW_BATTERY
                 else -> PLUGGED_IN
             }
-            IslandMode.LiveActivity -> LIVE_ACTIVITY
+            IslandMode.LiveActivity, IslandMode.LiveCard -> LIVE_ACTIVITY
             IslandMode.Navigation -> NAVIGATION
             IslandMode.DownloadUpload ->
                 if (n.transferKind == TransferKind.DOWNLOAD && n.key.contains("upload", ignoreCase = true)) {

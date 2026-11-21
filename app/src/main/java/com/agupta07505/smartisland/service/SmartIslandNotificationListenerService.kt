@@ -511,6 +511,14 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         scheduleCountRefresh()
 
         val notification = sbn.notification
+        // Live cards (util/LiveCardContract.kt): the app's "it's over" post ends the card (the island cancelled the
+        // notification from the shade, so the app's own removal would never reach it).
+        val isLiveCard = com.agupta07505.smartisland.util.LiveCardContract.isLiveCard(notification)
+        if (isLiveCard && com.agupta07505.smartisland.util.LiveCardContract.isEnded(notification)) {
+            endLiveCard(sbn.key)
+            return@runCatchingLogged
+        }
+        if (isLiveCard) liveCardKeys.add(sbn.key)
         callPostGuard.notePosted(sbn.key, sbn.postTime)
         tracePost(sbn, rankingMap)
 
@@ -538,7 +546,8 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         // there.
         try {
             if (currentSettings.enabled &&
-                currentSettings.hideFromNotificationShade &&
+                // A live card is island-only whatever the shade setting: the app asked for it.
+                (currentSettings.hideFromNotificationShade || isLiveCard) &&
                 !shouldSuppressFromIsland(sbn, rankingMap)
             ) {
                 val modeQuick = notification.toIslandMode(
@@ -716,6 +725,9 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         startRecordingWatchdog()
         startTransferExpirySweep()
         startMediaWatcher()
+        // Live cards were cancelled from the shade, so the shade import below cannot bring them back: their apps post
+        // them again (and end the ones that stopped while the listener was away).
+        com.agupta07505.smartisland.util.LiveCardContract.requestSync(this, notificationRepository.notifications.value)
         runCatchingLogged(TAG, "onListenerConnected callback failed") {
             android.util.Log.d(TAG, "onListenerConnected")
             serviceScope.launch {
@@ -763,7 +775,8 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
             if (!isPersistentIslandMode(mode) && !isLoudNotification) {
                 return@forEach
             }
-            if (settings.hideFromNotificationShade &&
+            if (mode == IslandMode.LiveCard) liveCardKeys.add(sbn.key)
+            if ((settings.hideFromNotificationShade || mode == IslandMode.LiveCard) &&
                 shouldHideFromShade(sbn.notification, mode, sbn.packageName)
             ) {
                 suppressSystemNotification(sbn.key)
@@ -1016,7 +1029,7 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
 
         val shouldIslandOnly = shouldBeIslandOnly(notification, mode)
 
-        val removedFromShade = settings.hideFromNotificationShade &&
+        val removedFromShade = (settings.hideFromNotificationShade || mode == IslandMode.LiveCard) &&
             shouldIslandOnly &&
             shouldHideFromShade(notification, mode, sbn.packageName)
         if (removedFromShade) {
@@ -1038,12 +1051,21 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
             action.title?.toString()?.let { title ->
                 val remoteInput = action.remoteInputs?.firstOrNull()
                 val isReply = remoteInput != null || title.lowercase().contains("reply")
+                val live = mode == IslandMode.LiveCard
+                val liveMatrix = if (live) com.agupta07505.smartisland.util.LiveCardContract.matrix(action.extras) else null
                 IslandNotificationAction(
                     title = title,
                     pendingIntent = action.actionIntent,
-                    isQuickReply = isReply,
+                    isQuickReply = !live && isReply,
                     remoteInputKey = remoteInput?.resultKey ?: "key_text_reply",
-                    icon = if (mode == IslandMode.Music) loadActionIcon(action, sbn.packageName) else null
+                    icon = if (mode == IslandMode.Music) loadActionIcon(action, sbn.packageName) else null,
+                    role = if (live) {
+                        action.extras?.getString(com.agupta07505.smartisland.util.LiveCardContract.ACTION_ROLE)
+                            ?: com.agupta07505.smartisland.util.LiveCardContract.ROLE_CONTROL
+                    } else null,
+                    selected = live && action.extras?.getBoolean(com.agupta07505.smartisland.util.LiveCardContract.ACTION_SELECTED, false) == true,
+                    matrix = liveMatrix?.first,
+                    matrixSize = liveMatrix?.second ?: 0
                 )
             }
         }.orEmpty().let { base ->
@@ -1601,6 +1623,9 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
                         com.agupta07505.smartisland.util.TimerStopwatchParser.isTimerPaused(notification))),
                 // Only plain notifications can be "silent"; live cards are usually low importance on purpose.
                 isSilent = mode == IslandMode.Notification && isSilentNotification(sbn),
+                liveShortText = if (mode == IslandMode.LiveCard) com.agupta07505.smartisland.util.LiveCardContract.shortText(notification) else "",
+                liveMatrix = if (mode == IslandMode.LiveCard) com.agupta07505.smartisland.util.LiveCardContract.matrix(notification.extras)?.first else null,
+                liveMatrixSize = if (mode == IslandMode.LiveCard) com.agupta07505.smartisland.util.LiveCardContract.matrix(notification.extras)?.second ?: 0 else 0,
                 callStatusText = connectingText.orEmpty(),
                 media = pictures,
                 readerText = if (pictures.isNotEmpty()) {
@@ -1661,7 +1686,7 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
             scheduleLatePicture(sbn, notification, notifText)
         }
 
-        if (settings.enableNotificationHistory && mode != IslandMode.Music) {
+        if (settings.enableNotificationHistory && mode != IslandMode.Music && mode != IslandMode.LiveCard) {
             serviceScope.launch {
                 runSuspendCatchingLogged(TAG, "Failed to record notification history") {
                     historyRepository.saveEntry(
@@ -1693,7 +1718,7 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         val isRecordingEvent = mode == IslandMode.ScreenRecording || mode == IslandMode.AudioRecording ||
             isRecordingNotification(sbn, notification)
         if (!isInitialSync && removedFromShade && isNewNotif && (mode == IslandMode.Notification || shouldIslandOnly) &&
-            mode != IslandMode.DownloadUpload && !isRecordingEvent
+            mode != IslandMode.DownloadUpload && mode != IslandMode.LiveCard && !isRecordingEvent
         ) {
             playNotificationSound(sbn)
         }
@@ -1830,7 +1855,9 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
 
         // Music playback and ongoing system hardware states (Hotspot, ScreenRecording)
         // are not intrusive notification alerts and must not be blocked by DND.
-        if (mode == IslandMode.Music || mode == IslandMode.Hotspot || mode == IslandMode.ScreenRecording || mode == IslandMode.AudioRecording) {
+        if (mode == IslandMode.Music || mode == IslandMode.Hotspot || mode == IslandMode.ScreenRecording || mode == IslandMode.AudioRecording ||
+            mode == IslandMode.LiveCard
+        ) {
             return false
         }
 
@@ -1991,8 +2018,22 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         return true
     }
 
+    /** Notification keys of live cards (util/LiveCardContract.kt): taken out of the shade whatever the shade setting. */
+    private val liveCardKeys = ConcurrentHashMap.newKeySet<String>()
+
+    /** A live card is over (its app said so): the card goes, and so does any copy still in the shade. */
+    private fun endLiveCard(key: String) {
+        com.agupta07505.smartisland.util.AppLogRecorder.i("LiveCard", "ended by its app: $key")
+        pendingRemovals.remove(key)?.cancel()
+        pendingSuppressionJobs.remove(key)?.cancel()
+        liveCardKeys.remove(key)
+        clearSuppressed(key)
+        notificationRepository.removeNotification(key)
+        runCatchingLogged(TAG, "Ended live card could not be cancelled") { cancelNotification(key) }
+    }
+
     private fun suppressSystemNotification(key: String) {
-        if (!currentSettings.enabled || !currentSettings.hideFromNotificationShade) return
+        if (!currentSettings.enabled || (!currentSettings.hideFromNotificationShade && key !in liveCardKeys)) return
         val activeSbn = runCatchingLogged(TAG, "Failed to get active notifications for key lookup") {
             activeNotifications.find { it.key == key }
         }
@@ -2015,7 +2056,7 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
                 repeat(3) { attempt ->
                     delay(100L * (attempt + 1)) // 100, 200, 300ms
                     if (!currentSettings.enabled ||
-                        !currentSettings.hideFromNotificationShade
+                        (!currentSettings.hideFromNotificationShade && key !in liveCardKeys)
                     ) {
                         clearSuppressed(key)
                         return@runSuspendCatchingLogged
@@ -2387,6 +2428,7 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
             mode == IslandMode.LiveActivity ||
             mode == IslandMode.DownloadUpload ||
             mode == IslandMode.Hotspot ||
+            mode == IslandMode.LiveCard ||
             mode == IslandMode.ScreenRecording ||
             mode == IslandMode.AudioRecording
     }

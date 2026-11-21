@@ -74,7 +74,12 @@ data class IslandNotification(
      * Timer cards from a Google / AOSP / third-party clock: [timeMillis] and [recordingFrozenMs] are exact and shown
      * like the shade; false for OEM clocks, which keep their rounding.
      */
-    val exactClock: Boolean = false
+    val exactClock: Boolean = false,
+    /** Live cards (util/LiveCardContract.kt): the app's word or two for the pill's right side. */
+    val liveShortText: String = "",
+    /** Live cards: the app's dot-matrix picture (n×n levels 0..1) and its size n; null when it sent none. */
+    val liveMatrix: FloatArray? = null,
+    val liveMatrixSize: Int = 0
 ) {
     /**
      * Not silent (importance DEFAULT or higher); live and system cards count as loud. Loud cards keep auto-expanding
@@ -109,5 +114,12 @@ data class IslandNotificationAction(
     /** The button's own icon; only read for media cards, so their extra buttons look like the app's. */
     val icon: android.graphics.Bitmap? = null,
     /** True when [pendingIntent] is the island's proxy for a button in the notification's custom view. */
-    val viaView: Boolean = false
+    val viaView: Boolean = false,
+    /** Live cards: "choice" (a thumbnail to pick) or "control" (a button); null for ordinary notifications. */
+    val role: String? = null,
+    /** Live cards: this choice is the one on now. */
+    val selected: Boolean = false,
+    /** Live cards: the choice's dot-matrix thumbnail (n×n levels 0..1) and its size n. */
+    val matrix: FloatArray? = null,
+    val matrixSize: Int = 0
 )

@@ -304,6 +304,11 @@ class SmartIslandOverlayService : AccessibilityService() {
                         // process: check the listener is really bound and force a rebind if not (songs and
                         // notifications only reach the island through it).
                         com.agupta07505.smartisland.util.SystemServiceRecovery.requestRecovery(this@SmartIslandOverlayService)
+                        // An app killed while the screen was off cannot say its live card ended: ask.
+                        com.agupta07505.smartisland.util.LiveCardContract.requestSync(
+                            this@SmartIslandOverlayService,
+                            com.agupta07505.smartisland.di.SmartIslandRepositories.notificationRepository(this@SmartIslandOverlayService).notifications.value
+                        )
                         updateWindowLayoutParams(
                             isWindowExpanded,
                             viewModel.displaySettings.value

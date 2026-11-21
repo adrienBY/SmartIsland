@@ -48,6 +48,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <queries>
+        <!-- Live cards (util/LiveCardContract.kt): finds the apps that answer the island's sync request. -->
+        <intent>
+            <action android:name="com.agupta07505.smartisland.action.LIVE_CARD_SYNC" />
+        </intent>
         <!-- Lets the Shizuku check see the Shizuku app (Android 11+ hides apps that are not listed here). -->
         <package android:name="moe.shizuku.privileged.api" />
         <package android:name="com.android.systemui" />

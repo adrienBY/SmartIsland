@@ -50,6 +50,7 @@ object ForegroundApp {
         IslandMode.AudioRecording,
         IslandMode.Hotspot,
         IslandMode.LiveActivity,
+        IslandMode.LiveCard,
         IslandMode.DownloadUpload -> true
         else -> false
     }

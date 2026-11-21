@@ -22,5 +22,7 @@ enum class IslandMode {
     ScreenRecording,
     AudioRecording,
     Timer,
-    Stopwatch
+    Stopwatch,
+    /** An app's own live card (util/LiveCardContract.kt), e.g. Phosphore's Glyph Matrix controls. */
+    LiveCard
 }
