@@ -364,6 +364,7 @@ fun IslandOverlayView(
     )
     AnimScaleProbeEffect()
     MergeTouchHapticEffect(layout, secondary, cb)
+    MotionBoostEffect(layout, secondary, ui, switchScaleAnim)
 
     Box(
         modifier = modifier
@@ -652,3 +653,34 @@ private const val SIDE_BY_SIDE_HOLD_MARGIN_MS = 0L
 
 private const val SPLIT_WIDTH_CACHE_MAX = 32
 private const val SPLIT_WIDTH_SAME_DP = 0.5f
+
+/**
+ * Asks for the panel's top refresh rate (util/MotionBoost.kt) on every frame where the island visibly moves: its
+ * shell, its content, a swipe, a merge. Values that only change while something moves, read in a snapshot flow, so
+ * an island at rest (or one whose music visualiser is the only thing moving) costs nothing and keeps the system's
+ * refresh rate.
+ */
+@Composable
+private fun MotionBoostEffect(
+    layout: IslandLayout,
+    secondary: IslandSecondary,
+    ui: IslandInteractionState,
+    switchScale: androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>
+) {
+    val layoutNow = androidx.compose.runtime.rememberUpdatedState(layout)
+    val secondaryNow = androidx.compose.runtime.rememberUpdatedState(secondary)
+    androidx.compose.runtime.LaunchedEffect(ui) {
+        androidx.compose.runtime.snapshotFlow {
+            val l = layoutNow.value
+            val s = secondaryNow.value
+            listOf(
+                l.safeWidth.value, l.safeHeight.value, l.safeRadius.value, l.expandProgress, l.handoff, l.hidingAlpha,
+                l.collapsedAlpha, l.expandedAlpha, l.animatedXOffset.value, l.yOffset.value, l.topShift.value,
+                s.secondaryOffset.value, s.secondaryBubbleWidth.value, s.secondaryMergeAnim.value, switchScale.value,
+                ui.cardDragX, ui.cardPop.value, ui.cardLeanFromPx, ui.dragOffset, ui.pillDragOffsetX, ui.pillContentDragX,
+                ui.pillEnter.value, ui.pillStretchX, ui.pillStretchY, ui.swipeDownPull, ui.handlePull, ui.deadZone.value,
+                ui.pillArm.value, ui.stepDrag.progress
+            )
+        }.collect { com.agupta07505.smartisland.util.MotionBoost.poke() }
+    }
+}
