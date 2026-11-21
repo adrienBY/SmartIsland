@@ -100,6 +100,45 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Fork: every main build is published as a GitHub Release, so the newest APK is one plain link (no zip, no sign-in):
+  # https://github.com/<owner>/<repo>/releases/latest/download/SmartIsland.apk
+  publish-release:
+    name: Publish release APK
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      KEEP_RELEASES: 5
+
+    steps:
+      - name: Download release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: SmartIsland-Release-apk
+
+      - name: Create release
+        run: |
+          TAG="build-${GITHUB_RUN_NUMBER}"
+          mv app-release.apk SmartIsland.apk
+          SUBJECT="$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA" --jq '.commit.message | split("\n")[0]')"
+          gh release create "$TAG" SmartIsland.apk \
+            --target "$GITHUB_SHA" \
+            --title "Build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})" \
+            --notes "$SUBJECT" \
+            --latest
+
+      - name: Keep only the newest builds
+        run: |
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("build-"))] | sort_by(.createdAt) | reverse | .[env.KEEP_RELEASES | tonumber:] | .[].tagName' |
+            while read -r old; do
+              gh release delete "$old" --yes --cleanup-tag
+            done
+
   send-apk:
     name: Forward debug APK to Telegram
     runs-on: ubuntu-latest
