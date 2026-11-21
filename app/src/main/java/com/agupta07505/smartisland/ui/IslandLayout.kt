@@ -646,17 +646,32 @@ internal fun rememberIslandLayout(
     val lastPulseAt = remember { longArrayOf(-com.agupta07505.smartisland.model.PillPulse.MIN_GAP_MS) }
     val seenKeys = remember { HashSet<String>().apply { notifications.forEach { add(it.key) } } }
     seenKeys.retainAll(notifications.map { it.key }.toSet())
-    val arrivalKey = notifications.firstOrNull { seenKeys.add(it.key) }?.key
-    LaunchedEffect(arrivalKey) {
-        if (arrivalKey == null || expanded || holdArrivalPulse || (isLandscape && !landscapePillStretch)) return@LaunchedEffect
+    // The last arrival stays put until the next one: keying the effect on "a card arrived in THIS composition" turned
+    // back to null on the next recomposition (any other change, e.g. the media session update that follows a song's
+    // notification a few ms later), which cancelled the pulse half-way and left the pill stuck wide.
+    val lastArrival = remember { arrayOfNulls<String>(1) }
+    val arrivalCount = remember { intArrayOf(0) }
+    notifications.firstOrNull { seenKeys.add(it.key) }?.let {
+        lastArrival[0] = it.key
+        arrivalCount[0]++
+    }
+    val arrivalKey = lastArrival[0]
+    val pulseBackSpec = spring<Float>(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy, stiffness = animSpeed.stiffness(PILL_PULSE_BACK_STIFFNESS))
+    LaunchedEffect(arrivalCount[0]) {
         val now = android.os.SystemClock.elapsedRealtime()
-        if (!com.agupta07505.smartisland.model.PillPulse.allowed(now, lastPulseAt[0])) return@LaunchedEffect
-        // A card that comes out of the camera because its app was left already has its own entrance (the hand-off).
-        if (com.agupta07505.smartisland.model.AppHandoff.explainsArrival(AppHandoffBus.event, arrivalKey, now)) return@LaunchedEffect
+        val play = arrivalKey != null && !expanded && !holdArrivalPulse && !(isLandscape && !landscapePillStretch) &&
+            com.agupta07505.smartisland.model.PillPulse.allowed(now, lastPulseAt[0]) &&
+            // A card that comes out of the camera because its app was left already has its own entrance (the hand-off).
+            !com.agupta07505.smartisland.model.AppHandoff.explainsArrival(AppHandoffBus.event, arrivalKey, now)
+        if (!play) {
+            // A pulse that a newer arrival interrupted settles from where it was instead of staying out.
+            if (pulse.value != 0f) pulse.animateTo(0f, pulseBackSpec)
+            return@LaunchedEffect
+        }
         lastPulseAt[0] = now
         pulse.snapTo(0f)
         pulse.animateTo(1f, spring(dampingRatio = com.agupta07505.smartisland.model.LiquidMotion.PULSE_OUT_DAMPING, stiffness = animSpeed.stiffness(PILL_PULSE_OUT_STIFFNESS)))
-        pulse.animateTo(0f, spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy, stiffness = animSpeed.stiffness(PILL_PULSE_BACK_STIFFNESS)))
+        pulse.animateTo(0f, pulseBackSpec)
     }
     LaunchedEffect(expanded, holdArrivalPulse) { if (expanded || holdArrivalPulse) pulse.snapTo(0f) }
     val handoff = rememberAppHandoff(settings, notifications, expanded, isLandscape, animSpeed)
@@ -812,6 +827,14 @@ private fun rememberAppHandoff(
         }
         // Taken: from here the drawing follows the spring itself (set after the snap, so no frame shows it at 1).
         taken.longValue = e.atMs
+        if (!grow0 && !shrink0 && anim.value != 1f && anim.value != 0f) {
+            // A newer event that plays nothing cancelled a morph half-way (this effect restarts on every event):
+            // finish it instead of leaving the pill stuck between the camera and its full size.
+            shrinkRunning.value = false
+            if (cardsNow.isEmpty() && hideWhenIdle && !expandedNow && !landscapeNow) anim.animateTo(0f, shrink)
+            else anim.animateTo(1f, grow)
+            return@LaunchedEffect
+        }
         if (grow0) anim.animateTo(1f, grow)
         if (shrink0) {
             try {
