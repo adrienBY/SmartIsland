@@ -271,6 +271,10 @@ class SmartIslandOverlayService : AccessibilityService() {
                         // Shizuku may have come up since the last check.
                         configureFaceUnlock(viewModel.displaySettings.value)
                         faceUnlockCoordinator.onScreenOn(isLockScreenActive, android.os.SystemClock.elapsedRealtime())
+                        // The overlay outlives the notification listener when a battery manager kills or freezes the
+                        // process: check the listener is really bound and force a rebind if not (songs and
+                        // notifications only reach the island through it).
+                        com.agupta07505.smartisland.util.SystemServiceRecovery.requestRecovery(this@SmartIslandOverlayService)
                         updateWindowLayoutParams(
                             isWindowExpanded,
                             viewModel.displaySettings.value
@@ -294,6 +298,7 @@ class SmartIslandOverlayService : AccessibilityService() {
                     Intent.ACTION_USER_PRESENT -> {
                         isLockScreenActive = false
                         faceUnlockCoordinator.onUserPresent(android.os.SystemClock.elapsedRealtime())
+                        com.agupta07505.smartisland.util.SystemServiceRecovery.requestRecovery(this@SmartIslandOverlayService)
                         updateWindowLayoutParams(
                             isWindowExpanded,
                             viewModel.displaySettings.value
@@ -1098,6 +1103,8 @@ class SmartIslandOverlayService : AccessibilityService() {
         super.onServiceConnected()
         isSystemConnected = true
         com.agupta07505.smartisland.util.SystemServiceRecovery.resetAccessibilityRefreshAttempt()
+        // A restarted process gets its accessibility service back from the system, not always its listener.
+        com.agupta07505.smartisland.util.SystemServiceRecovery.requestRecovery(this)
         installUtilityBridge()
         com.agupta07505.smartisland.util.InAppStopwatch.restore(this)
         com.agupta07505.smartisland.util.InAppTimer.restore(this)

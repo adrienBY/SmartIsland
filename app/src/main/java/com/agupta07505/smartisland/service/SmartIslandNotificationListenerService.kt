@@ -212,13 +212,19 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
 
     private var mediaWatcher: com.agupta07505.smartisland.util.MediaSessionWatcher? = null
 
+    /** Main thread only. Kept only once it really started, so a too-early attempt (access not live yet) is retried. */
     private fun startMediaWatcher() {
-        if (mediaWatcher != null) return
-        mediaWatcher = com.agupta07505.smartisland.util.MediaSessionWatcher(
+        if (mediaWatcher != null || !isSystemConnected) return
+        val watcher = com.agupta07505.smartisland.util.MediaSessionWatcher(
             context = this,
             listener = android.content.ComponentName(this, SmartIslandNotificationListenerService::class.java),
             onSnapshot = ::applyMediaSnapshot
-        ).also { it.start() }
+        )
+        if (watcher.start()) {
+            mediaWatcher = watcher
+        } else {
+            com.agupta07505.smartisland.util.AppLogRecorder.w("ListenerLifecycle", "media session watcher could not start yet, retried with the startup re-sync")
+        }
     }
 
     private fun applyMediaSnapshot(snapshot: com.agupta07505.smartisland.util.MediaSnapshot) {
@@ -412,6 +418,7 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         lastTimerShown.clear()
         voipMonitor?.stop()
         voipMonitor = null
+        if (instanceRef?.get() === this) instanceRef = null
         isSystemConnected = false
         lastSoundPlayedTimeMs = 0L
         lastAutoExpandTimeMs = 0L
@@ -698,6 +705,7 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         isSystemConnected = true
+        instanceRef = java.lang.ref.WeakReference(this)
         scheduleCountRefresh()
         com.agupta07505.smartisland.util.AppLogRecorder.i(
             "ListenerLifecycle",
@@ -769,6 +777,7 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         for (waitMs in INITIAL_RESYNC_DELAYS_MS) {
             delay(waitMs)
             resyncMissingPersistentCards()
+            mainScope.launch { startMediaWatcher() }
         }
     }
 
@@ -814,6 +823,7 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         isSystemConnected = false
+        if (instanceRef?.get() === this) instanceRef = null
         com.agupta07505.smartisland.util.NotificationCountTracker.clear()
         mediaWatcher?.stop()
         mediaWatcher = null
@@ -831,6 +841,9 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
                 )
             )
         }
+        // requestRebind() alone is a no-op unless this listener unbound itself: if the listener is still missing after
+        // a short grace (and access was not switched off), the recovery forces a fresh bind.
+        com.agupta07505.smartisland.util.SystemServiceRecovery.requestRecovery(this)
     }
 
     override fun onInterruptionFilterChanged(interruptionFilter: Int) {
@@ -2384,6 +2397,40 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         @Volatile
         var isSystemConnected: Boolean = false
             private set
+
+        @Volatile
+        private var instanceRef: java.lang.ref.WeakReference<SmartIslandNotificationListenerService>? = null
+
+        /**
+         * Whether the system still accepts calls from the connected listener. After an OEM freezer or a lost binding
+         * the system can drop the listener without onListenerDisconnected(): the flag stays true, yet no notification
+         * arrives and every call from the listener is refused ("Disallowed call from unknown notification listener").
+         * Marks the listener disconnected when that happens. Binder call: not on the main thread.
+         */
+        fun probeBinding(): Boolean {
+            if (!isSystemConnected) return false
+            val service = instanceRef?.get()
+            val alive = if (service == null) {
+                false
+            } else {
+                try {
+                    service.activeNotifications != null
+                } catch (e: SecurityException) {
+                    false
+                } catch (e: Exception) {
+                    // Anything else (a transient binder hiccup) is not proof of a dead binding.
+                    true
+                }
+            }
+            if (!alive) {
+                isSystemConnected = false
+                com.agupta07505.smartisland.util.AppLogRecorder.w(
+                    "ListenerLifecycle",
+                    "probe: the system no longer accepts this listener (stale binding), marking it disconnected"
+                )
+            }
+            return alive
+        }
 
         private const val TAG = "SmartIslandNotificationListener"
         private const val VOIP_CARD_KEY = "voip_call_audio"

@@ -102,14 +102,16 @@ class MediaSessionWatcher(
         sync(controllers.orEmpty())
     }
 
-    fun start() {
-        if (started) return
-        val mgr = manager ?: return
+    /** @return true once the watcher is listening (false when the system refused, e.g. access not live yet). */
+    fun start(): Boolean {
+        if (started) return true
+        val mgr = manager ?: return false
         runCatchingLogged(TAG, "Media session watcher could not start") {
             mgr.addOnActiveSessionsChangedListener(sessionsListener, listener, handler)
             started = true
             sync(mgr.getActiveSessions(listener))
         }
+        return started
     }
 
     fun stop() {
