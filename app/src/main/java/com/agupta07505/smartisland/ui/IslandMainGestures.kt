@@ -97,9 +97,19 @@ internal fun Modifier.islandMainGestures(
                     return@awaitEachGesture
                 }
                 ui.userTouched()
+                // The island is about to move under the finger: ask for the panel's top refresh rate now.
+                com.agupta07505.smartisland.util.MotionBoost.poke()
                 // A new touch takes the card over: an ease-back or "no card came" timer from the last swipe must not fight the finger.
                 ui.cardBackJob?.cancel()
                 ui.cardWaitJob?.cancel()
+                // ...and the swipe that timer was waiting for is over too. Left set, the pending swap blocked every ease-back
+                // (easeCardBack and the lift both wait for it), so the island stayed leaned and stretched to the side for
+                // good: a swipe whose card takes a while (next / previous event waits up to 600 ms) touched again.
+                if (ui.pendingCardEnterSign != 0) {
+                    ui.pendingCardEnterSign = 0
+                    ui.pendingCardFromKey = null
+                    ui.cardSwipeSnap = false
+                }
                 ui.pillReleaseJob?.cancel()
                 // A new touch catches the pill mid-wobble: it settles from there instead of the finger fighting it.
                 ui.pillStretchJob?.cancel()

@@ -89,6 +89,35 @@ class SmartIslandOverlayService : AccessibilityService() {
     private var collapseJob: kotlinx.coroutines.Job? = null
     private var lastParams: WindowManager.LayoutParams? = null
 
+    // Top refresh rate while the island moves (util/MotionBoost.kt). Main thread only.
+    private val motionHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var motionBoostMode: android.view.Display.Mode? = null
+    private val motionBoostRelease = Runnable {
+        if (motionBoostMode != null) {
+            motionBoostMode = null
+            reapplyRefreshRate()
+        }
+    }
+
+    private fun pokeMotionBoost() {
+        if (destroyed || islandView == null) return
+        if (motionBoostMode == null) {
+            val mode = com.agupta07505.smartisland.util.MotionBoost.fastestMode(this) ?: return
+            motionBoostMode = mode
+            reapplyRefreshRate()
+        }
+        motionHandler.removeCallbacks(motionBoostRelease)
+        motionHandler.postDelayed(motionBoostRelease, com.agupta07505.smartisland.util.MotionBoost.HOLD_MS)
+    }
+
+    private fun reapplyRefreshRate() {
+        val view = islandView ?: return
+        val params = lastParams ?: return
+        com.agupta07505.smartisland.util.MotionBoost.applyTo(params, motionBoostMode)
+        if (!::windowManager.isInitialized || !view.isAttachedToWindow) return
+        runCatchingLogged(TAG, "Refresh-rate request failed") { windowManager.updateViewLayout(view, params) }
+    }
+
     private val torchCallback = object : android.hardware.camera2.CameraManager.TorchCallback() {
         override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
             if (destroyed || !::viewModel.isInitialized) return
@@ -1149,6 +1178,8 @@ class SmartIslandOverlayService : AccessibilityService() {
         com.agupta07505.smartisland.util.AppLogRecorder.w("OverlayLifecycle", "onDestroy: overlay service destroyed (pid=${android.os.Process.myPid()})")
         destroyed = true
         isSystemConnected = false
+        com.agupta07505.smartisland.util.MotionBoost.sink = null
+        motionHandler.removeCallbacks(motionBoostRelease)
         com.agupta07505.smartisland.util.UtilityBridge.clear()
         com.agupta07505.smartisland.util.SystemAnimScale.stop(this)
         unregisterRotationListener()
@@ -1322,6 +1353,7 @@ class SmartIslandOverlayService : AccessibilityService() {
             } ?: run {
                 islandView = null
             }
+            if (islandView != null) com.agupta07505.smartisland.util.MotionBoost.sink = { pokeMotionBoost() }
         } catch (e: Exception) {
             android.util.Log.e(TAG, "ensureCollapsedWindow fatal", e)
             islandView = null
@@ -1724,6 +1756,8 @@ class SmartIslandOverlayService : AccessibilityService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
+            // A relayout in the middle of a movement (expanding, collapsing) keeps the refresh-rate request.
+            com.agupta07505.smartisland.util.MotionBoost.applyTo(this, motionBoostMode)
         }
         lastParams = params
         runCatchingLogged(TAG, "Failed to update view layout") { 
@@ -1737,6 +1771,9 @@ class SmartIslandOverlayService : AccessibilityService() {
         // even when an OEM WindowManager throws while detaching an already-removed view.
         islandView = null
         lastParams = null
+        com.agupta07505.smartisland.util.MotionBoost.sink = null
+        motionHandler.removeCallbacks(motionBoostRelease)
+        motionBoostMode = null
         isWindowExpanded = false
         collapseJob?.cancel()
         collapseJob = null
@@ -1806,6 +1843,7 @@ class SmartIslandOverlayService : AccessibilityService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
+            com.agupta07505.smartisland.util.MotionBoost.applyTo(this, motionBoostMode)
         }.also {
             lastParams = it
         }
